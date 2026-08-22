@@ -4,7 +4,7 @@ API de inferencia para el modelo de duración media de autocallables.
 Uso:
     uvicorn api:app --reload
 
-La API espera una RFQ ya "enriquecido" con los agregados de cesta
+La API espera una RFQ ya enriquecido con los agregados de cesta
 (num_underlyings, vol_63d_min/max/mean, base_vol_min/max/mean,
 sector_diversity), tal y como los produce preproceso.ipynb al agrupar
 por rfq_id. Sobre esa fila se aplica el mismo feature engineering final
@@ -58,19 +58,19 @@ class RFQEnriched(BaseModel):
     sector_diversity: int
 
 
-@app.get("/health")
+@app.get("/health")                        # Endpoint para verificar que la API está corriendo
 def health():
     return {"status": "ok"}
 
 
-@app.post("/predict")
+@app.post("/predict")                      # Endpoint para predecir la duración media de un autocallable dado un RFQ enriquecido
 def predict(payload: RFQEnriched):
     row = pd.DataFrame([payload.dict()])
 
     row["start_date"] = pd.to_datetime(row["start_date"])
     row["end_date"] = pd.to_datetime(row["end_date"])
 
-    # Mismo feature engineering que en entrenamiento.ipynb / preproceso.ipynb
+    # Mismo feature engineering que en preproceso.ipynb
     row["nominal_maturity_months"] = (
         ((row["end_date"] - row["start_date"]).dt.days / 30.4375)
         .clip(lower=0)
@@ -83,8 +83,6 @@ def predict(payload: RFQEnriched):
     row_encoded = pd.get_dummies(row, columns=CATEGORICAL_COLS, drop_first=False, dtype="int8")
 
     # Alineamos con las columnas vistas en entrenamiento:
-    # - una categoria no vista en training simplemente se pierde (no aporta señal nueva)
-    # - una columna dummy vista en training pero ausente en esta fila queda a 0
     row_aligned = row_encoded.reindex(columns=model_columns, fill_value=0)
 
     try:
