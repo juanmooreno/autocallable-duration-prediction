@@ -112,7 +112,61 @@ curl -X POST http://127.0.0.1:8000/predict \
 |----------|-------------|--------------|
 | XGBoost  | 4.215409    | 5.722944     |
 
-## Interpretación y sentido de negocio
+## Por qué XGBoost
+
+XGBoost es un modelo de **gradient boosting**: un conjunto de árboles de decisión
+construidos de forma secuencial, donde cada árbol nuevo corrige los errores
+(residuos) que ha dejado el árbol anterior, optimizando una función de pérdida
+mediante descenso de gradiente. Funciona especialmente bien en problemas de
+regresión sobre datos tabulares como este porque:
+
+- Captura de forma nativa relaciones **no lineales y con umbrales** (por ejemplo,
+  el efecto de una barrera de autocall no es un efecto lineal continuo, es más
+  bien un "o la supera o no la supera") sin necesidad de transformar variables a mano.
+- No requiere escalar ni normalizar las variables numéricas.
+- Maneja bien una mezcla de variables numéricas y categóricas (aquí, codificadas
+  vía one-hot) e interacciones entre ellas.
+- Es robusto y eficiente incluso con un volumen de datos moderado, sin necesitar
+  el ajuste tan fino de hiperparámetros que sí requieren, por ejemplo, las redes
+  neuronales.
+
+Su principal desventaja frente a otros métodos de árboles es que, al construir
+los árboles secuencialmente ajustando los residuos del anterior, es **más sensible
+al ruido y a valores atípicos** en la variable objetivo que modelos que promedian
+árboles independientes entre sí (como Random Forest) — por eso se controla su
+complejidad con un `learning_rate` bajo (0.03), `max_depth` moderado (6) y
+`subsample`/`colsample_bytree` por debajo de 1, para no sobreajustar. Como
+cualquier modelo basado en árboles, tampoco extrapola bien fuera del rango de
+valores vistos en entrenamiento (ver "Limitaciones del modelo").
+
+## Métrica de evaluación y separación train/test
+
+**MAE (Mean Absolute Error) como métrica principal**, porque usa las mismas
+unidades que la variable objetivo (meses), lo que la hace directamente
+interpretable: "el modelo se equivoca de media X meses". Además, al no elevar
+al cuadrado los errores, es menos sensible a valores atípicos puntuales que el
+RMSE — algo relevante aquí porque `avg_duration_months` se calcula mediante
+simulación, y esa simulación en sí misma introduce algo de ruido en el target.
+
+**RMSE como métrica complementaria**: al penalizar más los errores grandes,
+sirve para detectar si el modelo comete fallos puntuales muy grandes que el
+MAE, al promediar en valor absoluto, podría estar disimulando.
+
+**Separación 80/20 por fecha, no aleatoria**: el modelo, en producción, se
+usaría para predecir la duración de RFQs *futuras* a partir de lo aprendido
+con RFQs *pasadas*. Un split aleatorio mezclaría información del futuro dentro
+del entrenamiento (fuga temporal) y daría una métrica de evaluación
+artificialmente optimista, que no reflejaría el rendimiento real del modelo en
+producción. Por eso se ordena por `requested_date` y se reserva el último 20%
+cronológico como test.
+
+**Por qué se descartan al principio las filas sin valor en el target**: 
+`avg_duration_months` solo existe para las RFQs con `executed = True` — no hay
+forma de entrenar un modelo supervisado de regresión sin la etiqueta real, así
+que las RFQs no ejecutadas se excluyen del entrenamiento (esto introduce el
+sesgo de selección que se menciona más abajo, en limitaciones).
+
+## Análisis de resultados (SHAP)
 
 Según SHAP, las variables con más peso son:
 
@@ -123,7 +177,15 @@ Según SHAP, las variables con más peso son:
   (o llega a vencimiento).
 
 Ambas relaciones tienen sentido económico directo con la mecánica de un autocallable
-descrita en el enunciado.
+descrita en el enunciado: son, respectivamente, el techo estructural del contrato
+y la condición que determina si se cancela antes de tiempo.
+
+En el otro extremo, las variables con menos peso *(completar con las 5 que salgan
+de `shap_importance.nsmallest(5, 'mean_abs_shap')` en `entrenamiento.ipynb`)* suelen
+ser las dummies de identificadores con poca señal económica real — categorías
+concretas de `counterparty` o `trader_id`, que identifican *quién* pidió la
+cotización más que *cómo* se comporta el producto, y por tanto tiene sentido que
+aporten poco frente a variables que describen la mecánica del propio contrato.
 
 ## Limitaciones del modelo
 
@@ -138,3 +200,4 @@ descrita en el enunciado.
   individuales, lo cual es una limitación relevante para un producto *worst-of*.
 - Por todo esto, el modelo puede degradarse ante shocks de mercado o cambios de
   régimen no representados en el histórico de entrenamiento.
+
