@@ -76,7 +76,13 @@ calcula `preproceso.ipynb` al agrupar por `rfq_id`: `num_underlyings`,
 CSV en bruto — recalcular esa agregación en cada petición añade complejidad
 innecesaria.
 
-Ejemplo de petición:
+**Sin usar la terminal:** con el servidor corriendo, abre
+`http://127.0.0.1:8000/docs` en el navegador. FastAPI genera ahí una interfaz
+interactiva con los dos endpoints — puedes desplegar `POST /predict`,
+pulsar "Try it out", rellenar el JSON de ejemplo y pulsar "Execute" para ver la
+predicción, sin escribir ningún comando.  
+
+Ejemplo de petición por terminal:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/predict \
