@@ -24,11 +24,6 @@ de cotización (RFQs), mercado y referencia de subyacentes.
 └── README.md
 ```
 
-## Datos de entrada
-
-Este repositorio no incluye los CSV originales. Para reproducir el entrenamiento,
-coloca en `data/` los tres ficheros de origen: `rfqs.csv`, `daily_volatility.csv`
-y `underlyings_reference.csv`.
 
 ## Instalación
 
