@@ -165,3 +165,7 @@ poco.
 - El modelo de árboles no extrapola fuera del rango visto en entrenamiento.
 - Usa volatilidad agregada (media/min/max), sin correlación real entre subyacentes, relevante para un producto "worst-of".
 - Puede degradarse ante shocks o cambios de régimen no vistos en el histórico.
+
+---
+
+**Autor:** Juan Moreno Segura
