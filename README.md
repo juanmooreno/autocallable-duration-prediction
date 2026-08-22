@@ -107,9 +107,8 @@ curl -X POST http://127.0.0.1:8000/predict \
 
 ## Resultados
 
-*(completar con los valores reales tras ejecutar `entrenamiento.ipynb`)*
 
-| Modelo   | MAE (meses) | RMSE (meses) |
+| Modelo   | MAE (meses) | RMSE         |
 |----------|-------------|--------------|
 | XGBoost  | 4.215409    | 5.722944     |
 
