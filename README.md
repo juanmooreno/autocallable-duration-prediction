@@ -9,7 +9,7 @@ de cotización (RFQs), mercado y referencia de subyacentes.
 ```
 .
 ├── data/
-│   ├── rfqs.csv                     # (no incluido, ver "Datos de entrada")
+│   ├── rfqs.csv                    
 │   ├── daily_volatility.csv
 │   ├── underlyings_reference.csv
 │   └── processed_features.parquet   # generado por preproceso.ipynb
@@ -24,11 +24,6 @@ de cotización (RFQs), mercado y referencia de subyacentes.
 └── README.md
 ```
 
-## Datos de entrada
-
-Este repositorio no incluye los CSV originales. Para reproducir el entrenamiento,
-coloca en `data/` los tres ficheros de origen: `rfqs.csv`, `daily_volatility.csv`
-y `underlyings_reference.csv`.
 
 ## Instalación
 
@@ -56,14 +51,7 @@ pip install -r requirements.txt
 
 ## 2. Guardar el artefacto del modelo resultante
 
-Al final de `entrenamiento.ipynb` se guardan dos ficheros en `artifacts/`:
-
-```python
-import joblib, os
-os.makedirs("artifacts", exist_ok=True)
-joblib.dump(xgboost_model, "artifacts/model.pkl")
-joblib.dump(list(X_train.columns), "artifacts/model_columns.pkl")
-```
+Al final de `entrenamiento.ipynb` se guardan dos ficheros en `artifacts/`.  
 
 `model_columns.pkl` guarda el orden y nombre exacto de las columnas (incluidas las
 dummies de one-hot) que vio el modelo en entrenamiento. Es necesario porque el
@@ -119,9 +107,8 @@ curl -X POST http://127.0.0.1:8000/predict \
 
 ## Resultados
 
-*(completar con los valores reales tras ejecutar `entrenamiento.ipynb`)*
 
-| Modelo   | MAE (meses) | RMSE (meses) |
+| Modelo   | MAE (meses) | RMSE         |
 |----------|-------------|--------------|
 | XGBoost  | 4.215409    | 5.722944     |
 
