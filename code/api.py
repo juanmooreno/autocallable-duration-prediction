@@ -18,8 +18,8 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from datetime import date
 
-MODEL_PATH = "../artifacts/model.pkl"
-COLUMNS_PATH = "../artifacts/model_columns.pkl"
+MODEL_PATH = "artifacts/model.pkl"
+COLUMNS_PATH = "artifacts/model_columns.pkl"
 
 model = joblib.load(MODEL_PATH)
 model_columns = joblib.load(COLUMNS_PATH)
