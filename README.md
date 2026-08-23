@@ -9,7 +9,7 @@ de cotización (RFQs), mercado y referencia de subyacentes.
 ```
 .
 ├── data/
-│   ├── rfqs.csv                        # (no incluido, ver "Datos de entrada")
+│   ├── rfqs.csv                        
 │   ├── daily_volatility.csv
 │   ├── underlyings_reference.csv
 │   ├── rfqs_preprocessed.parquet       # generado por preproceso.ipynb
