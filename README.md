@@ -9,21 +9,27 @@ de cotización (RFQs), mercado y referencia de subyacentes.
 ```
 .
 ├── data/
-│   ├── rfqs.csv                    
+│   ├── rfqs.csv                        # (no incluido, ver "Datos de entrada")
 │   ├── daily_volatility.csv
 │   ├── underlyings_reference.csv
-│   └── processed_features.parquet   # generado por preproceso.ipynb
+│   ├── rfqs_preprocessed.parquet       # generado por preproceso.ipynb
+│   └── processed_features.parquet      # generado por enriquecimiento.ipynb
 ├── artifacts/
 │   ├── model.pkl                    # modelo entrenado (XGBoost)
 │   └── model_columns.pkl            # columnas exactas vistas en entrenamiento
-├── notebooks/
-│   ├── preproceso.ipynb             # integración de las 3 tablas + feature engineering
-│   ├── entrenamiento.ipynb          # entrenamiento, evaluación e interpretabilidad (SHAP)
+├── preproceso.ipynb                 # integración de las 3 tablas
+├── enriquecimiento.ipynb            # feature engineering + one-hot encoding
+├── entrenamiento.ipynb              # entrenamiento, evaluación e interpretabilidad (SHAP)
 ├── api.py                           # API de inferencia (FastAPI)
 ├── requirements.txt
 └── README.md
 ```
 
+## Datos de entrada
+
+Este repositorio no incluye los CSV originales. Para reproducir el entrenamiento,
+coloca en `data/` los tres ficheros de origen: `rfqs.csv`, `daily_volatility.csv`
+y `underlyings_reference.csv`.
 
 ## Instalación
 
@@ -38,8 +44,12 @@ pip install -r requirements.txt
 1. Abre y ejecuta `preproceso.ipynb` de principio a fin. Integra las tres tablas
    (explode de la cesta de subyacentes, cruce con `underlyings_reference.csv`,
    cruce temporal con `daily_volatility.csv` vía `merge_asof`, agregación a nivel
-   de RFQ) y genera `data/processed_features.parquet`.
-2. Abre y ejecuta `entrenamiento.ipynb` de principio a fin. Este notebook:
+   de RFQ) y genera `data/rfqs_preprocessed.parquet`.
+2. Abre y ejecuta `enriquecimiento.ipynb` de principio a fin. Parte de
+   `data/rfqs_preprocessed.parquet`, aplica el feature engineering final
+   (fechas → `nominal_maturity_months`, spreads, `no_call_ratio`) y la
+   codificación one-hot de las categóricas, y genera `data/processed_features.parquet`.
+3. Abre y ejecuta `entrenamiento.ipynb` de principio a fin. Este notebook:
    - Separa entrenamiento/evaluación **por fecha** (últimas RFQs por `requested_date`
      como test, un 20%), no de forma aleatoria — evita fugas de información temporal,
      ya que en producción el modelo predice sobre operaciones futuras.
@@ -51,7 +61,14 @@ pip install -r requirements.txt
 
 ## 2. Guardar el artefacto del modelo resultante
 
-Al final de `entrenamiento.ipynb` se guardan dos ficheros en `artifacts/`.  
+Al final de `entrenamiento.ipynb` se guardan dos ficheros en `artifacts/`:
+
+```python
+import joblib, os
+os.makedirs("artifacts", exist_ok=True)
+joblib.dump(xgboost_model, "artifacts/model.pkl")
+joblib.dump(list(X_train.columns), "artifacts/model_columns.pkl")
+```
 
 `model_columns.pkl` guarda el orden y nombre exacto de las columnas (incluidas las
 dummies de one-hot) que vio el modelo en entrenamiento. Es necesario porque el
@@ -73,16 +90,10 @@ La API queda escuchando en `http://127.0.0.1:8000`.
 La API espera una RFQ ya enriquecida con los agregados de cesta (los mismos que
 calcula `preproceso.ipynb` al agrupar por `rfq_id`: `num_underlyings`,
 `vol_63d_min/max/mean`, `base_vol_min/max/mean`, `sector_diversity`), no los tres
-CSV en bruto — recalcular esa agregación en cada petición añade complejidad
-innecesaria.
+CSV en bruto — recalcular esa agregación en cada petición añadiría complejidad
+innecesaria para lo que pide el enunciado ("API sencilla").
 
-**Sin usar la terminal:** con el servidor corriendo, abre
-`http://127.0.0.1:8000/docs` en el navegador. FastAPI genera ahí una interfaz
-interactiva con los dos endpoints — puedes desplegar `POST /predict`,
-pulsar "Try it out", rellenar el JSON de ejemplo y pulsar "Execute" para ver la
-predicción, sin escribir ningún comando.  
-
-Ejemplo de petición por terminal:
+Ejemplo de petición:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/predict \
@@ -92,7 +103,6 @@ curl -X POST http://127.0.0.1:8000/predict \
     "basket_type": "worst_of",
     "observation_frequency": "quarterly",
     "counterparty": "CPTY_01",
-    "trader_id": "TRD_01",
     "autocall_barrier_pct": 1.0,
     "protection_barrier_pct": 0.7,
     "no_call_period_months": 6,
@@ -113,65 +123,100 @@ curl -X POST http://127.0.0.1:8000/predict \
 
 ## Resultados
 
+*(completar con los valores reales tras ejecutar `entrenamiento.ipynb`)*
 
-| Modelo   | MAE (meses) | RMSE         |
+| Modelo   | MAE (meses) | RMSE (meses) |
 |----------|-------------|--------------|
-| XGBoost  | 4.215409    | 5.722944     |
+| XGBoost  |             |              |
 
-## Justificación del Modelo
+## Por qué XGBoost
 
-XGBoost es un modelo de gradient boosting: un conjunto de árboles que se
-construyen de forma secuencial, cada uno corrigiendo los errores del anterior.
-Funciona bien aquí porque captura relaciones no lineales y con umbrales (como
-el efecto de una barrera de autocall) sin transformar variables a mano, maneja
-de forma nativa la mezcla de numéricas y categóricas, y no necesita el ajuste
-fino que sí requieren, por ejemplo, las redes neuronales.
+XGBoost es un modelo de **gradient boosting**: un conjunto de árboles de decisión
+construidos de forma secuencial, donde cada árbol nuevo corrige los errores
+(residuos) que ha dejado el árbol anterior, optimizando una función de pérdida
+mediante descenso de gradiente. Funciona especialmente bien en problemas de
+regresión sobre datos tabulares como este porque:
 
-Su desventaja principal es que, al ajustar residuos secuencialmente, es más
-sensible al ruido y a valores atípicos que modelos que promedian árboles
-independientes (como Random Forest), por eso se controla la complejidad con
-`learning_rate` bajo (0.03), `max_depth` moderado (6) y `subsample`/`colsample_bytree`
-por debajo de 1. Como cualquier modelo de árboles, tampoco extrapola bien fuera
-del rango visto en entrenamiento.
+- Captura de forma nativa relaciones **no lineales y con umbrales** (por ejemplo,
+  el efecto de una barrera de autocall no es un efecto lineal continuo, es más
+  bien un "o la supera o no la supera") sin necesidad de transformar variables a mano.
+- No requiere escalar ni normalizar las variables numéricas.
+- Maneja bien una mezcla de variables numéricas y categóricas (aquí, codificadas
+  vía one-hot) e interacciones entre ellas.
+- Es robusto y eficiente incluso con un volumen de datos moderado, sin necesitar
+  el ajuste tan fino de hiperparámetros que sí requieren, por ejemplo, las redes
+  neuronales.
 
-## Métrica y separación train/test
+Su principal desventaja frente a otros métodos de árboles es que, al construir
+los árboles secuencialmente ajustando los residuos del anterior, es **más sensible
+al ruido y a valores atípicos** en la variable objetivo que modelos que promedian
+árboles independientes entre sí (como Random Forest) — por eso se controla su
+complejidad con un `learning_rate` bajo (0.03), `max_depth` moderado (6) y
+`subsample`/`colsample_bytree` por debajo de 1, para no sobreajustar. Como
+cualquier modelo basado en árboles, tampoco extrapola bien fuera del rango de
+valores vistos en entrenamiento (ver "Limitaciones del modelo").
 
-**MAE** como métrica principal: usa las mismas unidades que el target (meses),
-directamente interpretable, y menos sensible a atípicos que el RMSE, relevante
-porque `avg_duration_months` viene de una simulación con su propio ruido. **RMSE**
-como complementaria, para detectar fallos puntuales grandes que el MAE podría
-disimular.
+## Métrica de evaluación y separación train/test
 
-**Split 80/20 por fecha, no aleatorio**: el modelo predice sobre RFQs futuras a
-partir de RFQs pasadas; un split aleatorio filtraría información del futuro y
-daría una métrica artificialmente optimista.
+**MAE (Mean Absolute Error) como métrica principal**, porque usa las mismas
+unidades que la variable objetivo (meses), lo que la hace directamente
+interpretable: "el modelo se equivoca de media X meses". Además, al no elevar
+al cuadrado los errores, es menos sensible a valores atípicos puntuales que el
+RMSE — algo relevante aquí porque `avg_duration_months` se calcula mediante
+simulación, y esa simulación en sí misma introduce algo de ruido en el target.
 
-**Filas sin target descartadas**: `avg_duration_months` solo existe si
-`executed = True`, sin etiqueta no hay forma de entrenar.
+**RMSE como métrica complementaria**: al penalizar más los errores grandes,
+sirve para detectar si el modelo comete fallos puntuales muy grandes que el
+MAE, al promediar en valor absoluto, podría estar disimulando.
+
+**Separación 80/20 por fecha, no aleatoria**: el modelo, en producción, se
+usaría para predecir la duración de RFQs *futuras* a partir de lo aprendido
+con RFQs *pasadas*. Un split aleatorio mezclaría información del futuro dentro
+del entrenamiento (fuga temporal) y daría una métrica de evaluación
+artificialmente optimista, que no reflejaría el rendimiento real del modelo en
+producción. Por eso se ordena por `requested_date` y se reserva el último 20%
+cronológico como test.
+
+**Por qué se descartan al principio las filas sin valor en el target**: 
+`avg_duration_months` solo existe para las RFQs con `executed = True` — no hay
+forma de entrenar un modelo supervisado de regresión sin la etiqueta real, así
+que las RFQs no ejecutadas se excluyen del entrenamiento (esto introduce el
+sesgo de selección que se menciona más abajo, en limitaciones).
 
 ## Análisis de resultados (SHAP)
 
 Según SHAP, las variables con más peso son:
 
-- **`nominal_maturity_months`**: marca el techo temporal del contrato. Un producto
-  a un año nunca puede durar cinco, así que acota directamente la variable objetivo.
-- **`autocall_barrier_pct`**: cuanto más alta la barrera, más difícil que la cesta
-  la supere, y por tanto más tiempo tiende a vivir el producto antes de cancelarse.
+- **`nominal_maturity_months`**: es la que más peso tiene, ya que marca el techo
+  temporal del contrato — un producto diseñado a un año nunca podrá durar cinco,
+  así que acota directamente la variable objetivo.
+- **`base_vol_max`**: tiene sentido financiero en estructuras *worst-of* — el
+  subyacente con mayor volatilidad estructural de la cesta es el más propenso a
+  sufrir caídas pronunciadas y actuar como el "activo más débil", impidiendo que
+  la cesta supere la barrera y alargando la vida del producto.
+- **`product_type_Wretched Hive Digital`**: destaca frente al resto de tipos de
+  producto, lo que indica que las condiciones contractuales y la estructura de
+  pagos propias de este tipo condicionan fuertemente la probabilidad de autocall
+  frente a formatos más convencionales.
 
-Ambas relaciones tienen sentido económico directo con la mecánica de un autocallable ya que son, respectivamente, el techo estructural del contrato
-y la condición que determina si se cancela antes de tiempo.
-
-Las de menor peso suelen ser dummies de `counterparty`/`trader_id`: identifican quién pidió la
-cotización, no cómo se comporta el producto, así que tiene sentido que aporten
-poco.
+En el otro extremo, las variables con importancia prácticamente nula son las
+distintas contrapartes (`counterparty_Banco de Coruscant`, `counterparty_Jabba
+Asset Management`, `counterparty_Nal Hutta Traders`) y tipos de producto concretos
+como `product_type_Mandalorian Twin-Win`. Tiene sentido: la duración esperada de
+la estructura depende de las condiciones técnicas del contrato (vencimiento
+nominal, barreras) y de la dinámica de volatilidad del mercado, no de qué cliente
+institucional o entidad solicita la cotización en la mesa.
 
 ## Limitaciones del modelo
 
-- Solo se entrena con RFQs ejecutadas. Sesgo de selección frente a todas las solicitadas.
-- El modelo de árboles no extrapola fuera del rango visto en entrenamiento.
-- Usa volatilidad agregada (media/min/max), sin correlación real entre subyacentes, relevante para un producto "worst-of".
-- Puede degradarse ante shocks o cambios de régimen no vistos en el histórico.
-
----
-
-**Autor:** Juan Moreno Segura
+- Solo se entrena con RFQs **ejecutadas** (`executed = True`), que no son necesariamente
+  una muestra representativa de todas las solicitudes recibidas — sesgo de selección.
+- Al ser un modelo basado en árboles, **no extrapola**: ante un contrato con vencimiento
+  o volatilidad fuera del rango visto en entrenamiento, la predicción se queda
+  estancada en el valor de la última hoja del árbol.
+- El modelo usa métricas resumen de volatilidad (media/min/max) en lugar de simular
+  la evolución día a día de los precios y su correlación real dentro de la cesta —
+  no tiene acceso a la correlación entre subyacentes, solo a volatilidades
+  individuales, lo cual es una limitación relevante para un producto *worst-of*.
+- Por todo esto, el modelo puede degradarse ante shocks de mercado o cambios de
+  régimen no representados en el histórico de entrenamiento.
