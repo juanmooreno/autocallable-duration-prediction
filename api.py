@@ -90,4 +90,4 @@ def predict(payload: RFQEnriched):
     except Exception as exc:
         raise HTTPException(status_code=400, detail=f"Error al predecir: {exc}")
 
-    return {"avg_duration_months": float(prediction)}
+    return {"avg_duration_months": float(prediction.round(3))}
