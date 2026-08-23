@@ -115,6 +115,8 @@ curl -X POST http://127.0.0.1:8000/predict \
 |----------|-------------|--------------|
 | XGBoost  | 4.071674    | 5.512276     |
 
+Un MAE de 4.07 indica que, en promedio, las predicciones del modelo se desvían aproximadamente 4.1 meses de la duración real del producto (⁠avg_duration_months⁠).
+
 ## Por qué XGBoost
 
 XGBoost es un modelo de **gradient boosting**: un conjunto de árboles que se
