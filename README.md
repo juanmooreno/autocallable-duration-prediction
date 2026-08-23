@@ -17,19 +17,14 @@ de cotización (RFQs), mercado y referencia de subyacentes.
 ├── artifacts/
 │   ├── model.pkl                    # modelo entrenado (XGBoost)
 │   └── model_columns.pkl            # columnas exactas vistas en entrenamiento
-├── preproceso.ipynb                 # integración de las 3 tablas
-├── enriquecimiento.ipynb            # feature engineering + one-hot encoding
-├── entrenamiento.ipynb              # entrenamiento, evaluación e interpretabilidad (SHAP)
+├── notebooks/
+│   ├── preproceso.ipynb             # integración de las 3 tablas
+│   ├── enriquecimiento.ipynb        # feature engineering + one-hot encoding
+│   └── entrenamiento.ipynb          # entrenamiento, evaluación e interpretabilidad (SHAP)
 ├── api.py                           # API de inferencia (FastAPI)
 ├── requirements.txt
 └── README.md
 ```
-
-## Datos de entrada
-
-Este repositorio no incluye los CSV originales. Para reproducir el entrenamiento,
-coloca en `data/` los tres ficheros de origen: `rfqs.csv`, `daily_volatility.csv`
-y `underlyings_reference.csv`.
 
 ## Instalación
 
