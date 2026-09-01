@@ -31,7 +31,6 @@ CATEGORICAL_COLS = [
     "basket_type",
     "observation_frequency",
     "counterparty",
-    "trader_id",
 ]
 
 
@@ -40,7 +39,6 @@ class RFQEnriched(BaseModel):
     basket_type: str
     observation_frequency: str
     counterparty: str
-    trader_id: str
     autocall_barrier_pct: float
     protection_barrier_pct: float
     no_call_period_months: int
