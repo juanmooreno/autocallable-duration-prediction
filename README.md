@@ -87,10 +87,10 @@ Ejemplo de petición:
 curl -X POST http://127.0.0.1:8000/predict \
   -H "Content-Type: application/json" \
   -d '{
-    "product_type": "autocallable_basket",
+    "product_type": "Wretched Hive Digital",
     "basket_type": "worst_of",
     "observation_frequency": "quarterly",
-    "counterparty": "CPTY_01",
+    "counterparty": "Banco de Coruscant",
     "autocall_barrier_pct": 1.0,
     "protection_barrier_pct": 0.7,
     "no_call_period_months": 6,
